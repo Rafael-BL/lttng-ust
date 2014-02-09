@@ -364,6 +364,17 @@ struct lttng_ust_excluder_node {
 	 */
 	struct lttng_ust_event_exclusion excluder;
 };
+
+struct lttng_ust_target_node {
+	struct cds_list_head node;
+	struct lttng_enabler *enabler;
+	/*
+	 * struct lttng_ust_event_target had variable sized array,
+	 * must be last field.
+	 */
+	struct lttng_ust_event_target target;
+};
+
 /*
  * Filter return value masks.
  */

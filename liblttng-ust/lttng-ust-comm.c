@@ -694,6 +694,66 @@ int handle_message(struct sock_info *sock_info,
 		}
 		break;
 	}
+	case LTTNG_UST_TARGET:
+	{
+		/* Receive instrument target */
+		struct lttng_ust_target_node *node;
+		unsigned int path_len;
+
+		path_len = lum->u.target.path_len;
+		if (path_len == 0) {
+			/* There are no path to read */
+			ret = 0;
+			goto error;
+		}
+		node = zmalloc(sizeof(*node) + path_len);
+		if (!node) {
+			ret = -ENOMEM;
+			goto error;
+		}
+		node->target.path_len = path_len;
+		len = ustcomm_recv_unix_sock(sock, node->target.path, path_len);
+		switch (len) {
+		case 0:	/* orderly shutdown */
+			ret = 0;
+			free(node);
+			goto error;
+		default:
+			if (len == path_len) {
+				DBG("Instrument target path received");
+				break;
+			} else if (len < 0) {
+				DBG("Receive failed from lttng-sessiond with errno %d", (int) -len);
+				if (len == -ECONNRESET) {
+					ERR("%s remote end closed connection", sock_info->name);
+					ret = len;
+					free(node);
+					goto error;
+				}
+				ret = len;
+				free(node);
+				goto end;
+			} else {
+				DBG("Incorrect instrument target path message size: %zd", len);
+				ret = -EINVAL;
+				free(node);
+				goto end;
+			}
+		}
+		if (ops->cmd) {
+			ret = ops->cmd(lum->handle, lum->cmd,
+					(unsigned long) node,
+					&args, sock_info);
+			if (ret) {
+				free(node);
+			}
+			/* Don't free instrument target data if everything went fine. */
+		} else {
+			ret = -ENOSYS;
+			free(node);
+		}
+		break;
+	}
 	case LTTNG_UST_CHANNEL:
 	{
 		void *chan_data;
