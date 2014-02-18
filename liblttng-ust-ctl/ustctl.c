@@ -200,6 +200,19 @@ int ustctl_create_event(int sock, struct lttng_ust_event *ev,
 	lum.u.event.instrumentation = ev->instrumentation;
 	lum.u.event.loglevel_type = ev->loglevel_type;
 	lum.u.event.loglevel = ev->loglevel;
+
+	switch (ev->instrumentation) {
+	case LTTNG_UST_PROBE:
+	/* Fall-through */
+	case LTTNG_UST_FUNCTION:
+		lum.u.event.u.probe.addr = ev->u.probe.addr;
+		lum.u.event.u.probe.offset = ev->u.probe.offset;
+		strncpy(lum.u.event.u.probe.symbol_name, ev->u.probe.symbol_name,
+			LTTNG_UST_SYM_NAME_LEN);
+	default:
+		break;
+	}
+
 	ret = ustcomm_send_app_cmd(sock, &lum, &lur);
 	if (ret) {
 		free(event_data);
