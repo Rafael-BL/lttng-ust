@@ -167,6 +167,25 @@ struct ustcomm_notify_channel_reply {
 	char padding[USTCOMM_NOTIFY_CHANNEL_REPLY_PADDING];
 } LTTNG_PACKED;
 
+#define USTCOMM_NOTIFY_INSTRUMENT_MSG_PADDING	32
+struct ustcomm_notify_instrument_msg {
+	uint32_t instrumentation;	/* enum lttng_ust_instrumentation */
+	char name[LTTNG_UST_SYM_NAME_LEN];
+	struct lttng_ust_instrument_tracepoint_attr tracepoint;
+	uint64_t addr;
+	char symbol[LTTNG_UST_SYM_NAME_LEN];
+	uint64_t offset;
+	char padding[USTCOMM_NOTIFY_INSTRUMENT_MSG_PADDING];
+	uint32_t object_path_len;
+	/* followed by object_path */
+} LTTNG_PACKED;
+
+#define USTCOMM_NOTIFY_INSTRUMENT_REPLY_PADDING	32
+struct ustcomm_notify_instrument_reply {
+	int32_t ret_code;	/* 0: ok, negative: error code */
+	char padding[USTCOMM_NOTIFY_INSTRUMENT_REPLY_PADDING];
+} LTTNG_PACKED;
+
 /*
  * LTTNG_UST_TRACEPOINT_FIELD_LIST reply is followed by a
  * struct lttng_ust_field_iter field.

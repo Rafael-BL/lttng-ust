@@ -250,6 +250,7 @@ enum ustctl_socket_type {
 enum ustctl_notify_cmd {
 	USTCTL_NOTIFY_CMD_EVENT = 0,
 	USTCTL_NOTIFY_CMD_CHANNEL = 1,
+	USTCTL_NOTIFY_CMD_INSTRUMENT = 2,
 };
 
 enum ustctl_channel_header {
@@ -414,5 +415,22 @@ int ustctl_reply_register_channel(int sock,
 	uint32_t chan_id,
 	enum ustctl_channel_header header_type,
 	int ret_code);			/* return code. 0 ok, negative error */
+
+/*
+ * Returns 0 on success, negative error value on error.
+ */
+int ustctl_recv_instrument_probe(int sock,
+	char *object_path,
+	char *name,
+	struct lttng_ust_instrument_tracepoint_attr *tracepoint,
+	enum lttng_ust_instrumentation *instrumentation,
+	uint64_t *addr,
+	char *symbol,
+	uint64_t *offset);
+
+/*
+ * Returns 0 on success, negative error value on error.
+ */
+int ustctl_reply_instrument_probe(int sock, int ret_code);
 
 #endif /* _LTTNG_UST_CTL_H */

@@ -2021,6 +2021,77 @@ int ustctl_reply_register_channel(int sock,
 	return 0;
 }
 
+/*
+ * Returns 0 on success, negative error value on error.
+ */
+int ustctl_recv_instrument_probe(int sock,
+	char *object_path,
+	char *name,
+	struct lttng_ust_instrument_tracepoint_attr *tracepoint,
+	enum lttng_ust_instrumentation *instrumentation,
+	uint64_t *addr,
+	char *symbol,
+	uint64_t *offset)
+{
+	ssize_t len;
+	struct ustcomm_notify_instrument_msg msg;
+
+	len = ustcomm_recv_unix_sock(sock, &msg, sizeof(msg));
+	if (len > 0 && len != sizeof(msg))
+		return -EIO;
+	if (len == 0)
+		return -EPIPE;
+	if (len < 0)
+		return len;
+
+	strncpy(name, msg.name, LTTNG_UST_SYM_NAME_LEN);
+	name[LTTNG_UST_SYM_NAME_LEN - 1] = '\0';
+	*tracepoint = msg.tracepoint;
+	memcpy(tracepoint, &msg.tracepoint,
+		sizeof(struct lttng_ust_instrument_tracepoint_attr));
+	*instrumentation = msg.instrumentation;
+	*addr = msg.addr;
+	strncpy(symbol, msg.symbol, LTTNG_UST_SYM_NAME_LEN);
+	symbol[LTTNG_UST_SYM_NAME_LEN - 1] = '\0';
+	*offset = msg.offset;
+
+	if (msg.object_path_len <= 0) {
+		return -EINVAL;
+	}
+
+	len = ustcomm_recv_unix_sock(sock, object_path, msg.object_path_len);
+	if (len > 0 && len != msg.object_path_len)
+		return -EIO;
+	if (len == 0)
+		return -EPIPE;
+	if (len < 0)
+		return len;
+
+	return 0;
+}
+
+/*
+ * Returns 0 on success, negative error value on error.
+ */
+int ustctl_reply_instrument_probe(int sock, int ret_code)
+{
+	ssize_t len;
+	struct {
+		struct ustcomm_notify_hdr header;
+		struct ustcomm_notify_instrument_reply r;
+	} reply;
+
+	memset(&reply, 0, sizeof(reply));
+	reply.header.notify_cmd = USTCTL_NOTIFY_CMD_INSTRUMENT;
+	reply.r.ret_code = ret_code;
+	len = ustcomm_send_unix_sock(sock, &reply, sizeof(reply));
+	if (len > 0 && len != sizeof(reply))
+		return -EIO;
+	if (len < 0)
+		return len;
+	return 0;
+}
+
 static __attribute__((constructor))
 void ustctl_init(void)
 {

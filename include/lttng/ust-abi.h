@@ -268,6 +268,20 @@ struct lttng_ust_event_target {
 	char path[0];
 } LTTNG_PACKED;
 
+struct lttng_ust_instrument_function_attr {
+	struct tracepoint *entry;
+	struct tracepoint *exit;
+} LTTNG_PACKED;
+
+#define LTTNG_UST_INSTRUMENT_TRACEPOINT_ATTR_PADDING	32
+struct lttng_ust_instrument_tracepoint_attr {
+	union {
+		struct lttng_ust_instrument_function_attr function;
+		struct tracepoint *probe;
+		char padding[LTTNG_UST_INSTRUMENT_TRACEPOINT_ATTR_PADDING];
+	} u;
+} LTTNG_PACKED;
+
 #define _UST_CMD(minor)				(minor)
 #define _UST_CMDR(minor, type)			(minor)
 #define _UST_CMDW(minor, type)			(minor)
