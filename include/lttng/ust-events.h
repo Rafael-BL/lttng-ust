@@ -283,7 +283,12 @@ struct lttng_event_desc {
 	} u;
 };
 
-#define LTTNG_UST_PROBE_DESC_PADDING	12
+enum lttng_probe_type {
+	LTTNG_PROBE_STATIC,
+	LTTNG_PROBE_INSTRUMENT,
+};
+
+#define LTTNG_UST_PROBE_DESC_PADDING	8
 struct lttng_probe_desc {
 	const char *provider;
 	const struct lttng_event_desc **event_desc;
@@ -293,6 +298,7 @@ struct lttng_probe_desc {
 	int lazy;				/* lazy registration */
 	uint32_t major;
 	uint32_t minor;
+	enum lttng_probe_type type;
 	char padding[LTTNG_UST_PROBE_DESC_PADDING];
 };
 
@@ -301,6 +307,8 @@ struct lttng_probe_desc {
 enum lttng_enabler_type {
 	LTTNG_ENABLER_WILDCARD,
 	LTTNG_ENABLER_EVENT,
+	LTTNG_ENABLER_PROBE,
+	LTTNG_ENABLER_FUNCTION,
 };
 
 /*
@@ -577,6 +585,8 @@ int lttng_enabler_enable(struct lttng_enabler *enabler);
 int lttng_enabler_disable(struct lttng_enabler *enabler);
 int lttng_enabler_attach_bytecode(struct lttng_enabler *enabler,
 		struct lttng_ust_filter_bytecode_node *bytecode);
+int lttng_enabler_attach_target(struct lttng_enabler *enabler,
+		struct lttng_ust_event_target *target);
 int lttng_enabler_attach_context(struct lttng_enabler *enabler,
 		struct lttng_ust_context *ctx);
 int lttng_enabler_attach_exclusion(struct lttng_enabler *enabler,

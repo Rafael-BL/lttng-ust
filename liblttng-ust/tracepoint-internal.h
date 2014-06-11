@@ -22,6 +22,7 @@
 #include <urcu/list.h>
 #include <urcu-bp.h>
 #include <lttng/tracepoint-types.h>
+#include <lttng/ust-events.h>
 
 #define TRACE_DEFAULT	TRACE_DEBUG_LINE
 
@@ -38,6 +39,11 @@ extern int tracepoint_probe_register_noupdate(const char *name,
 extern int tracepoint_probe_unregister_noupdate(const char *name,
 		void (*callback)(void), void *priv);
 extern void tracepoint_probe_update_all(void);
+
+extern struct tracepoint *tracepoint_find_by_name(const char *name);
+extern int tracepoint_register(struct tracepoint* tracepoint);
+
+extern void lttng_dynamic_probe_callback(struct lttng_event *event);
 
 /*
  * call after disconnection of last probe implemented within a

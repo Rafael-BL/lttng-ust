@@ -32,6 +32,7 @@
 #include <stddef.h>
 #include <inttypes.h>
 #include <time.h>
+#include <link.h>
 #include <lttng/ust-endian.h>
 #include "clock.h"
 
@@ -441,19 +442,129 @@ socket_error:
 exist:
 	return ret;
 }
+/*
+ * Notify sessiond to instrument the application.
+ */
+static
+struct tracepoint *lttng_create_tracepoint_if_missing(const char *name)
+{
+	struct tracepoint *tracepoint;
+	/* Check if the probe is already instrumented */
+	tracepoint = tracepoint_find_by_name(name);
+	if (!tracepoint) {
+		size_t provider_len = strchr(name, ':') - name;
+		char *provider;
+		const char *signature = name + provider_len + 1;
+
+		/* TODO: When and where to free */
+		provider = malloc(provider_len);
+		memcpy(provider, name, provider_len);
+		provider[provider_len] = '\0';
+
+		/* Create and register tracepoint */
+		/* TODO: When and where to free ? */
+		tracepoint = zmalloc(sizeof(struct tracepoint));
+		tracepoint->name = name;
+		tracepoint->state = 0;
+		tracepoint->probes = NULL;
+		tracepoint->signature = signature;
+		tracepoint_register(tracepoint);
+
+		/* Create and register probe */
+		/* TODO: When and where to free ? */
+		struct lttng_event_desc *event_desc =
+			zmalloc(sizeof(struct lttng_event_desc));
+		event_desc->name = name;
+		event_desc->probe_callback = (void (*)()) lttng_dynamic_probe_callback;
+		event_desc->ctx = NULL;
+		event_desc->fields = NULL;
+		event_desc->nr_fields = 0;
+		event_desc->signature = signature;
+
+		/* TODO: When and where to free ? */
+		struct lttng_probe_desc *probe_desc =
+			zmalloc(sizeof(struct lttng_probe_desc));
+		probe_desc->provider = provider;
+		probe_desc->event_desc =
+			zmalloc(sizeof(const struct lttng_event_desc *));
+		probe_desc->event_desc[0] = event_desc;
+		probe_desc->nr_events = 1;
+		probe_desc->major = LTTNG_UST_PROVIDER_MAJOR;
+		probe_desc->minor = LTTNG_UST_PROVIDER_MINOR;
+		probe_desc->type = LTTNG_PROBE_INSTRUMENT;
+
+		lttng_probe_register(probe_desc);
+	}
+
+	return tracepoint;
+}
+
+/*
+ * Notify sessiond to instrument the application.
+ */
+static
+int lttng_probe_instrument(const struct lttng_ust_event *uevent,
+		struct lttng_channel *chan)
+{
+	struct lttng_session *session = chan->session;
+	struct lttng_ust_instrument_tracepoint_attr tracepoint;
+	char *tracepoint_name_entry, *tracepoint_name_exit;
+	int ret = 0, notify_socket, name_len;
+
+	switch (uevent->instrumentation) {
+	case LTTNG_UST_PROBE:
+		tracepoint.u.probe = lttng_create_tracepoint_if_missing(uevent->name);
+		break;
+	case LTTNG_UST_FUNCTION:
+		name_len = strlen(uevent->name);
+		/* TODO: When and where to free ? */
+		tracepoint_name_entry = malloc(name_len + sizeof("_entry"));
+		strcpy(tracepoint_name_entry, uevent->name);
+		strcat(tracepoint_name_entry, "_entry");
+		tracepoint.u.function.entry =
+			lttng_create_tracepoint_if_missing(tracepoint_name_entry);
+
+		/* TODO: When and where to free ? */
+		tracepoint_name_exit = malloc(name_len + sizeof("_exit"));
+		strcpy(tracepoint_name_exit, uevent->name);
+		strcat(tracepoint_name_exit, "_exit");
+		tracepoint.u.function.exit =
+			lttng_create_tracepoint_if_missing(tracepoint_name_exit);
+		break;
+	default:
+		ERR("Undefined instrumentation type");
+		goto sessiond_instrument_error;
+		break;
+	}
+
+	notify_socket = lttng_get_notify_socket(session->owner);
+	if (notify_socket < 0) {
+		ret = notify_socket;
+		goto socket_error;
+	}
+
+	/* Notify sessiond to do the instrumentation */
+	ret = ustcomm_instrument_probe(notify_socket, &tracepoint, uevent);
+	if (ret < 0) {
+		goto sessiond_instrument_error;
+	}
+	return 0;
+
+socket_error:
+sessiond_instrument_error:
+	ERR("Error (%d) instrument probe %s by sessiond", ret, uevent->name);
+	return ret;
+}
+
+
 
 static
-int lttng_desc_match_wildcard_enabler(const struct lttng_event_desc *desc,
+int lttng_desc_loglevel_match_enabler(const struct lttng_event_desc *desc,
 		struct lttng_enabler *enabler)
 {
 	int loglevel = 0;
 	unsigned int has_loglevel = 0;
 
-	assert(enabler->type == LTTNG_ENABLER_WILDCARD);
-	/* Compare excluding final '*' */
-	if (strncmp(desc->name, enabler->event_param.name,
-			strlen(enabler->event_param.name) - 1))
-		return 0;
 	if (desc->loglevel) {
 		loglevel = *(*desc->loglevel);
 		has_loglevel = 1;
@@ -467,25 +578,36 @@ int lttng_desc_match_wildcard_enabler(const struct lttng_event_desc *desc,
 }
 
 static
+int lttng_desc_match_wildcard_enabler(const struct lttng_event_desc *desc,
+		struct lttng_enabler *enabler)
+{
+	assert(enabler->type == LTTNG_ENABLER_WILDCARD);
+	/* Compare excluding final '*' */
+	if (strncmp(desc->name, enabler->event_param.name,
+			strlen(enabler->event_param.name) - 1))
+		return 0;
+	return lttng_desc_loglevel_match_enabler(desc, enabler);
+}
+
+static
 int lttng_desc_match_event_enabler(const struct lttng_event_desc *desc,
 		struct lttng_enabler *enabler)
 {
-	int loglevel = 0;
-	unsigned int has_loglevel = 0;
-
-	assert(enabler->type == LTTNG_ENABLER_EVENT);
+	assert((enabler->type == LTTNG_ENABLER_EVENT)
+			|| (enabler->type == LTTNG_ENABLER_PROBE));
 	if (strcmp(desc->name, enabler->event_param.name))
 		return 0;
-	if (desc->loglevel) {
-		loglevel = *(*desc->loglevel);
-		has_loglevel = 1;
-	}
-	if (!lttng_loglevel_match(loglevel,
-			has_loglevel,
-			enabler->event_param.loglevel_type,
-			enabler->event_param.loglevel))
+	return lttng_desc_loglevel_match_enabler(desc, enabler);
+}
+
+static
+int lttng_desc_match_function_enabler(const struct lttng_event_desc *desc,
+		struct lttng_enabler *enabler)
+{
+	assert(enabler->type == LTTNG_ENABLER_FUNCTION);
+	if (strstr(desc->name, enabler->event_param.name) != desc->name)
 		return 0;
-	return 1;
+	return lttng_desc_loglevel_match_enabler(desc, enabler);
 }
 
 static
@@ -521,7 +643,10 @@ int lttng_desc_match_enabler(const struct lttng_event_desc *desc,
 	case LTTNG_ENABLER_WILDCARD:
 		return lttng_desc_match_wildcard_enabler(desc, enabler);
 	case LTTNG_ENABLER_EVENT:
+	case LTTNG_ENABLER_PROBE:
 		return lttng_desc_match_event_enabler(desc, enabler);
+	case LTTNG_ENABLER_FUNCTION:
+		return lttng_desc_match_function_enabler(desc, enabler);
 	default:
 		return -EINVAL;
 	}
@@ -536,6 +661,31 @@ int lttng_event_match_enabler(struct lttng_event *event,
 		return 1;
 	else
 		return 0;
+}
+
+int check_shared_lib_cb(struct dl_phdr_info *info, size_t size, void *path)
+{
+	return !strcmp((char *) path, info->dlpi_name);
+}
+
+/*
+ * Check if instrument target path match application's execute path or shared
+ * libraries loaded.
+ *
+ * Return 0 if not target path does not match.
+ */
+static
+int check_instrument_target_path(struct lttng_enabler *enabler)
+{
+	char exec_path[PATH_MAX];
+
+	if (lttng_ust_getexecpath(exec_path) == -1)
+		return 0;
+	if (!strcmp(exec_path, enabler->event_param.target->path))
+		return 1;
+
+	return dl_iterate_phdr(check_shared_lib_cb,
+			enabler->event_param.target->path);
 }
 
 static
@@ -565,6 +715,17 @@ void lttng_create_event_if_missing(struct lttng_enabler *enabler)
 	struct lttng_event *event;
 	int i;
 	struct cds_list_head *probe_list;
+
+	switch (enabler->type) {
+	case LTTNG_ENABLER_PROBE:
+	case LTTNG_ENABLER_FUNCTION:
+		if (!check_instrument_target_path(enabler) ||
+				lttng_probe_instrument(&enabler->event_param, enabler->chan)) {
+			return;
+		}
+	default:
+		break;
+	}
 
 	probe_list = lttng_get_probe_list_head();
 	/*
@@ -783,6 +944,14 @@ int lttng_enabler_attach_exclusion(struct lttng_enabler *enabler,
 	lttng_session_lazy_sync_enablers(enabler->chan->session);
 	return 0;
 }
+int lttng_enabler_attach_target(struct lttng_enabler *enabler,
+		struct lttng_ust_event_target *target)
+{
+	enabler->event_param.target = target;
+	lttng_session_lazy_sync_enablers(enabler->chan->session);
+	return 0;
+}
+
 
 int lttng_attach_context(struct lttng_ust_context *context_param,
 		struct lttng_ctx **ctx, struct lttng_session *session)

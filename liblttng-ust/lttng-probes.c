@@ -72,6 +72,49 @@ int check_event_provider(struct lttng_probe_desc *desc)
 	return 1;
 }
 
+static
+const struct lttng_probe_desc *find_provider(const char *provider)
+{
+	struct lttng_probe_desc *iter;
+	struct cds_list_head *probe_list;
+
+	probe_list = lttng_get_probe_list_head();
+	cds_list_for_each_entry(iter, probe_list, head) {
+		if (!strcmp(iter->provider, provider))
+			return iter;
+	}
+	return NULL;
+}
+
+static
+int check_provider_version(struct lttng_probe_desc *desc)
+{
+	/*
+	 * Check tracepoint provider version compatibility.
+	 */
+	if (desc->major <= LTTNG_UST_PROVIDER_MAJOR) {
+		DBG("Provider \"%s\" accepted, version %u.%u is compatible "
+			"with LTTng UST provider version %u.%u.",
+			desc->provider, desc->major, desc->minor,
+			LTTNG_UST_PROVIDER_MAJOR,
+			LTTNG_UST_PROVIDER_MINOR);
+		if (desc->major < LTTNG_UST_PROVIDER_MAJOR) {
+			DBG("However, some LTTng UST features might not be "
+				"available for this provider unless it is "
+				"recompiled against a more recent LTTng UST.");
+		}
+		return 1;		/* accept */
+	} else {
+		ERR("Provider \"%s\" rejected, version %u.%u is incompatible "
+			"with LTTng UST provider version %u.%u. Please upgrade "
+			"LTTng UST.",
+			desc->provider, desc->major, desc->minor,
+			LTTNG_UST_PROVIDER_MAJOR,
+			LTTNG_UST_PROVIDER_MINOR);
+		return 0;		/* reject */
+	}
+}
+
 /*
  * Called under ust lock.
  */
@@ -87,13 +130,41 @@ void lttng_lazy_probe_register(struct lttng_probe_desc *desc)
 	 * carefulness. This ensures we cannot have duplicate event
 	 * names across providers.
 	 */
-	assert(check_event_provider(desc));
-
+	if (desc->type == LTTNG_PROBE_STATIC) {
+		assert(check_event_provider(desc));
+	};
 	/*
 	 * The provider ensures there are no duplicate event names.
 	 * Duplicated TRACEPOINT_EVENT event names would generate a
 	 * compile-time error due to duplicated symbol names.
 	 */
+
+	/* TODO: Make sure no duplicated event for instrumented probes */
+
+	/*
+	 * For instrumented probes, insert newly added probes to the same
+	 * list indexed by provider name.
+	 *
+	 * TODO: We can group this merge operation for probes of a same provider
+	 * to reduce unnecessary realloc. This will require lazy_probe list sorted
+	 * by provider name. Change desc->event_desc to a linked list will solve
+	 * this problem but it is much more difficult.
+	 */
+	if (desc->type == LTTNG_PROBE_INSTRUMENT) {
+		/* Discard const point qualifier */
+		iter = (struct lttng_probe_desc *) find_provider(desc->provider);
+		if (iter) {
+			iter->event_desc = realloc(iter->event_desc,
+					sizeof(struct lttng_event_desc *)
+					* (iter->nr_events + desc->nr_events));
+			memcpy(iter->event_desc + iter->nr_events, desc->event_desc,
+					sizeof(struct lttng_event_desc *) * desc->nr_events);
+			free(desc->event_desc);
+			iter->nr_events += desc->nr_events;
+			goto desc_added;
+		}
+	}
+
 
 	/*
 	 * We sort the providers by struct lttng_probe_desc pointer
@@ -146,50 +217,6 @@ struct cds_list_head *lttng_get_probe_list_head(void)
 	return &_probe_list;
 }
 
-static
-const struct lttng_probe_desc *find_provider(const char *provider)
-{
-	struct lttng_probe_desc *iter;
-	struct cds_list_head *probe_list;
-
-	probe_list = lttng_get_probe_list_head();
-	cds_list_for_each_entry(iter, probe_list, head) {
-		if (!strcmp(iter->provider, provider))
-			return iter;
-	}
-	return NULL;
-}
-
-static
-int check_provider_version(struct lttng_probe_desc *desc)
-{
-	/*
-	 * Check tracepoint provider version compatibility.
-	 */
-	if (desc->major <= LTTNG_UST_PROVIDER_MAJOR) {
-		DBG("Provider \"%s\" accepted, version %u.%u is compatible "
-			"with LTTng UST provider version %u.%u.",
-			desc->provider, desc->major, desc->minor,
-			LTTNG_UST_PROVIDER_MAJOR,
-			LTTNG_UST_PROVIDER_MINOR);
-		if (desc->major < LTTNG_UST_PROVIDER_MAJOR) {
-			DBG("However, some LTTng UST features might not be "
-				"available for this provider unless it is "
-				"recompiled against a more recent LTTng UST.");
-		}
-		return 1;		/* accept */
-	} else {
-		ERR("Provider \"%s\" rejected, version %u.%u is incompatible "
-			"with LTTng UST provider version %u.%u. Please upgrade "
-			"LTTng UST.",
-			desc->provider, desc->major, desc->minor,
-			LTTNG_UST_PROVIDER_MAJOR,
-			LTTNG_UST_PROVIDER_MINOR);
-		return 0;		/* reject */
-	}
-}
-
-
 int lttng_probe_register(struct lttng_probe_desc *desc)
 {
 	int ret = 0;
@@ -206,7 +233,7 @@ int lttng_probe_register(struct lttng_probe_desc *desc)
 	/*
 	 * Check if the provider has already been registered.
 	 */
-	if (find_provider(desc->provider)) {
+	if ((desc->type == LTTNG_PROBE_STATIC) && find_provider(desc->provider)) {
 		ret = -EEXIST;
 		goto end;
 	}

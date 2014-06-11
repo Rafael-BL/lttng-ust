@@ -876,6 +876,18 @@ long lttng_channel_cmd(int objd, unsigned int cmd, unsigned long arg,
 	{
 		struct lttng_ust_event *event_param =
 			(struct lttng_ust_event *) arg;
+
+		switch (event_param->instrumentation) {
+			case LTTNG_UST_PROBE:
+				return lttng_abi_create_enabler(objd, event_param,
+						owner, LTTNG_ENABLER_PROBE);
+			case LTTNG_UST_FUNCTION:
+				return lttng_abi_create_enabler(objd, event_param,
+						owner, LTTNG_ENABLER_FUNCTION);
+			default:
+				break;
+		}
+
 		if (event_param->name[strlen(event_param->name) - 1] == '*') {
 			/* If ends with wildcard, create wildcard. */
 			return lttng_abi_create_enabler(objd, event_param,
@@ -936,6 +948,8 @@ static const struct lttng_ust_objd_ops lttng_channel_ops = {
  *		Attach a filter to an enabler.
  *	LTTNG_UST_EXCLUSION
  *		Attach exclusions to an enabler.
+ *	LTTNG_UST_TARGET
+ *		Attach target to an enabler.
  */
 static
 long lttng_enabler_cmd(int objd, unsigned int cmd, unsigned long arg,
@@ -965,6 +979,11 @@ long lttng_enabler_cmd(int objd, unsigned int cmd, unsigned long arg,
 	{
 		return lttng_enabler_attach_exclusion(enabler,
 				(struct lttng_ust_excluder_node *) arg);
+	}
+	case LTTNG_UST_TARGET:
+	{
+		return lttng_enabler_attach_target(enabler,
+				(struct lttng_ust_event_target *) arg);
 	}
 	default:
 		return -EINVAL;

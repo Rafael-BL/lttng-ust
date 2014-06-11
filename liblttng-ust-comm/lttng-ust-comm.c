@@ -1119,6 +1119,85 @@ int ustcomm_register_channel(int sock,
 		}
 	}
 }
+/*
+ *  Returns 0 on success, negative error value on error.
+ */
+int ustcomm_instrument_probe(int sock,
+	struct lttng_ust_instrument_tracepoint_attr *tracepoint,
+	const struct lttng_ust_event *uevent)	/* userspace event */
+{
+	ssize_t len;
+	struct {
+		struct ustcomm_notify_hdr header;
+		struct ustcomm_notify_instrument_msg m;
+	} msg;
+	struct {
+		struct ustcomm_notify_hdr header;
+		struct ustcomm_notify_instrument_reply r;
+	} reply;
+
+	memset(&msg, 0, sizeof(msg));
+	msg.header.notify_cmd = USTCTL_NOTIFY_CMD_INSTRUMENT;
+	msg.m.instrumentation = uevent->instrumentation;
+	strncpy(msg.m.name, uevent->name, LTTNG_UST_SYM_NAME_LEN);
+	msg.m.name[LTTNG_UST_SYM_NAME_LEN - 1] = '\0';
+	memcpy(&msg.m.tracepoint, tracepoint,
+			sizeof(struct lttng_ust_instrument_tracepoint_attr));
+	msg.m.addr = uevent->u.probe.addr;
+	strncpy(msg.m.symbol, uevent->u.probe.symbol_name, LTTNG_UST_SYM_NAME_LEN);
+	msg.m.symbol[LTTNG_UST_SYM_NAME_LEN - 1] = '\0';
+	msg.m.offset = uevent->u.probe.offset;
+	msg.m.object_path_len = uevent->target->path_len;
+
+	len = ustcomm_send_unix_sock(sock, &msg, sizeof(msg));
+	if (len > 0 && len != sizeof(msg)) {
+		return -EIO;
+	}
+	if (len < 0) {
+		return len;
+	}
+
+	len = ustcomm_send_unix_sock(sock, uevent->target->path,
+			uevent->target->path_len);
+	if (len > 0 && len != uevent->target->path_len) {
+		return -EIO;
+	}
+	if (len < 0) {
+		return len;
+	}
+
+	/* receive reply */
+	len = ustcomm_recv_unix_sock(sock, &reply, sizeof(reply));
+	switch (len) {
+	case 0:	/* orderly shutdown */
+		return -EPIPE;
+	case sizeof(reply):
+		if (reply.header.notify_cmd != msg.header.notify_cmd) {
+			ERR("Unexpected result message command "
+				"expected: %u vs received: %u\n",
+				msg.header.notify_cmd, reply.header.notify_cmd);
+			return -EINVAL;
+		}
+		if (reply.r.ret_code > 0)
+			return -EINVAL;
+		if (reply.r.ret_code < 0)
+			return reply.r.ret_code;
+		DBG("Sent instrument probe notification for object \"%s\": ret_code %d\n",
+			uevent->target->path, reply.r.ret_code);
+		return 0;
+	default:
+		if (len < 0) {
+			/* Transport level error */
+			if (errno == EPIPE || errno == ECONNRESET)
+				len = -errno;
+			return len;
+		} else {
+			ERR("incorrect message size: %zd\n", len);
+			return len;
+		}
+	}
+}
+
 
 /*
  * Set socket reciving timeout.

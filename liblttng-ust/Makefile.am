@@ -27,6 +27,7 @@ liblttng_ust_runtime_la_SOURCES = \
 	lttng-context-procname.c \
 	lttng-context-ip.c \
 	lttng-context.c \
+	lttng-dynamic-probes.c \
 	lttng-events.c \
 	lttng-filter.c \
 	lttng-filter.h \

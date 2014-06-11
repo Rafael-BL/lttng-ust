@@ -34,6 +34,23 @@ void lttng_ust_getprocname(char *name)
 	(void) prctl(PR_GET_NAME, (unsigned long) name, 0, 0, 0);
 }
 
+static inline
+int lttng_ust_getexecpath(char *path)
+{
+	ssize_t len;
+
+	if ((len = readlink("/proc/self/exe", path, PATH_MAX)) != -1) {
+		path[len] = '\0';
+		return len;
+	}
+	return -1;
+}
+
+#ifndef PTHREAD_RECURSIVE_MUTEX_INITIALIZER
+#define PTHREAD_RECURSIVE_MUTEX_INITIALIZER \
+	PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP
+#endif
+
 #elif defined(__FreeBSD__)
 #include <stdlib.h>
 #include <string.h>

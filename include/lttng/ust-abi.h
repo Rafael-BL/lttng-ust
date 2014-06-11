@@ -123,6 +123,7 @@ struct lttng_ust_event {
 
 	enum lttng_ust_loglevel_type loglevel_type;
 	int loglevel;	/* value, -1: all */
+	struct lttng_ust_event_target *target;
 	char padding[LTTNG_UST_EVENT_PADDING1];
 
 	/* Per instrumentation type configuration */
@@ -363,5 +364,8 @@ int lttng_ust_objd_unref(int id, int is_owner);
 void lttng_ust_abi_exit(void);
 void lttng_ust_events_exit(void);
 void lttng_ust_objd_table_owner_cleanup(void *owner);
+
+/* Function to trigger dynamic instrumented tracepoint */
+#define LTTNG_DYNAMIC_TRACEPOINT tracepoint_of
 
 #endif /* _LTTNG_UST_ABI_H */
