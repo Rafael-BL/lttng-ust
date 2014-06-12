@@ -712,7 +712,7 @@ int handle_message(struct sock_info *sock_info,
 			goto error;
 		}
 		node->target.path_len = path_len;
-		len = ustcomm_recv_unix_sock(sock, node->target.path, path_len);
+		len = ustcomm_recv_unix_sock(sock, &(node->target.path), path_len);
 		switch (len) {
 		case 0:	/* orderly shutdown */
 			ret = 0;
@@ -742,7 +742,7 @@ int handle_message(struct sock_info *sock_info,
 		}
 		if (ops->cmd) {
 			ret = ops->cmd(lum->handle, lum->cmd,
-					(unsigned long) node,
+					(unsigned long) &(node->target),
 					&args, sock_info);
 			if (ret) {
 				free(node);

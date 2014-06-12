@@ -271,14 +271,13 @@ int ustctl_set_target(int sock, struct lttng_ust_event_target *target,
 	memset(&lum, 0, sizeof(lum));
 	lum.handle = obj_data->handle;
 	lum.cmd = LTTNG_UST_TARGET;
-	lum.u.target.path_len = sizeof(struct lttng_ust_event_target)
-			+ target->path_len;
+	lum.u.target.path_len = target->path_len;
 
 	ret = ustcomm_send_app_msg(sock, &lum);
 	if (ret)
 		return ret;
 	/* send var len target struct */
-	ret = ustcomm_send_unix_sock(sock, target, lum.u.target.path_len);
+	ret = ustcomm_send_unix_sock(sock, &(target->path), lum.u.target.path_len);
 	if (ret < 0) {
 		return ret;
 	}

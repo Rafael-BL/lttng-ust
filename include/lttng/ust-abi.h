@@ -115,7 +115,7 @@ struct lttng_ust_event_probe_attr {
 	char padding[LTTNG_UST_EVENT_PROBE_PADDING];
 } LTTNG_PACKED;
 
-#define LTTNG_UST_EVENT_PADDING1	16
+#define LTTNG_UST_EVENT_PADDING1	(16 - sizeof(struct lttng_ust_event_target *))
 #define LTTNG_UST_EVENT_PADDING2	(LTTNG_UST_SYM_NAME_LEN + 32)
 struct lttng_ust_event {
 	enum lttng_ust_instrumentation instrumentation;
