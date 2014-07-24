@@ -446,7 +446,7 @@ exist:
  * Notify sessiond to instrument the application.
  */
 static
-struct tracepoint *lttng_create_tracepoint_if_missing(const char *name)
+struct tracepoint *lttng_create_tracepoint_if_missing(const char *name, struct lttng_channel *chan)
 {
 	struct tracepoint *tracepoint;
 	/* Check if the probe is already instrumented */
@@ -468,6 +468,7 @@ struct tracepoint *lttng_create_tracepoint_if_missing(const char *name)
 		tracepoint->state = 0;
 		tracepoint->probes = NULL;
 		tracepoint->signature = signature;
+
 		tracepoint_register(tracepoint);
 
 		/* Create and register probe */
@@ -480,6 +481,8 @@ struct tracepoint *lttng_create_tracepoint_if_missing(const char *name)
 		event_desc->fields = NULL;
 		event_desc->nr_fields = 0;
 		event_desc->signature = signature;
+
+		lttng_event_create(event_desc, chan);
 
 		/* TODO: When and where to free ? */
 		struct lttng_probe_desc *probe_desc =
@@ -513,7 +516,7 @@ int lttng_probe_instrument(const struct lttng_ust_event *uevent,
 
 	switch (uevent->instrumentation) {
 	case LTTNG_UST_PROBE:
-		tracepoint.u.probe = lttng_create_tracepoint_if_missing(uevent->name);
+		tracepoint.u.probe = lttng_create_tracepoint_if_missing(uevent->name, chan);
 		break;
 	case LTTNG_UST_FUNCTION:
 		name_len = strlen(uevent->name);
@@ -522,14 +525,14 @@ int lttng_probe_instrument(const struct lttng_ust_event *uevent,
 		strcpy(tracepoint_name_entry, uevent->name);
 		strcat(tracepoint_name_entry, "_entry");
 		tracepoint.u.function.entry =
-			lttng_create_tracepoint_if_missing(tracepoint_name_entry);
+			lttng_create_tracepoint_if_missing(tracepoint_name_entry, chan);
 
 		/* TODO: When and where to free ? */
 		tracepoint_name_exit = malloc(name_len + sizeof("_exit"));
 		strcpy(tracepoint_name_exit, uevent->name);
 		strcat(tracepoint_name_exit, "_exit");
 		tracepoint.u.function.exit =
-			lttng_create_tracepoint_if_missing(tracepoint_name_exit);
+			lttng_create_tracepoint_if_missing(tracepoint_name_exit, chan);
 		break;
 	default:
 		ERR("Undefined instrumentation type");
