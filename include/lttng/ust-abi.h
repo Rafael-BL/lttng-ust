@@ -330,6 +330,7 @@ struct lttng_ust_instrument_tracepoint_attr {
 #define LTTNG_UST_FILTER			_UST_CMD(0xA0)
 #define LTTNG_UST_EXCLUSION			_UST_CMD(0xA1)
 #define LTTNG_UST_TARGET			_UST_CMD(0xA2)
+#define LTTNG_UST_ACTIVATE_TP			_UST_CMD(0xA3)
 
 #define LTTNG_UST_ROOT_HANDLE	0
 

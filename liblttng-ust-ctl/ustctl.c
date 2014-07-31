@@ -286,7 +286,24 @@ int ustctl_set_target(int sock, struct lttng_ust_event_target *target,
 	return ustcomm_recv_app_reply(sock, &lur, lum.handle, lum.cmd);
 }
 
+int ustctl_activate_tp(int sock, struct lttng_ust_object_data *obj_data)
+{
+	struct ustcomm_ust_msg lum;
+	struct ustcomm_ust_reply lur;
+	int ret;
 
+	if (!obj_data)
+		return -EINVAL;
+
+	memset(&lum, 0, sizeof(lum));
+	lum.handle = obj_data->handle;
+	lum.cmd = LTTNG_UST_ACTIVATE_TP;
+
+	ret = ustcomm_send_app_msg(sock, &lum);
+	if (ret)
+		return ret;
+	return  ustcomm_recv_app_reply(sock, &lur, lum.handle, lum.cmd);
+}
 int ustctl_set_filter(int sock, struct lttng_ust_filter_bytecode *bytecode,
 		struct lttng_ust_object_data *obj_data)
 {

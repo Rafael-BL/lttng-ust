@@ -289,6 +289,7 @@ static const char *cmd_name_mapping[] = {
 	[ LTTNG_UST_FILTER ] = "Create Filter",
 	[ LTTNG_UST_EXCLUSION ] = "Add exclusions to event",
 	[ LTTNG_UST_TARGET ] = "Add instrument target to event",
+	[ LTTNG_UST_ACTIVATE_TP ] = "Activate dynamic tracepoint",
 };
 
 static const char *str_timeout;
@@ -526,6 +527,8 @@ void handle_pending_statedump(struct sock_info *sock_info)
 	}
 }
 
+int lttng_ust_fake_function(){return 0;}
+
 static
 int handle_message(struct sock_info *sock_info,
 		int sock, struct ustcomm_ust_msg *lum)
@@ -692,6 +695,15 @@ int handle_message(struct sock_info *sock_info,
 			ret = -ENOSYS;
 			free(node);
 		}
+		break;
+	}
+	case LTTNG_UST_ACTIVATE_TP:
+	{
+		DBG("Lttng ust activated tp");
+		//Call dummy function that should have been instrumented by 
+		//session deamon. The instrumentation on this function will
+		//register both probe and tracepoint and then activate the tracepoint it self.
+		lttng_ust_fake_function();
 		break;
 	}
 	case LTTNG_UST_TARGET:
