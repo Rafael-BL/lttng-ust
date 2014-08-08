@@ -25,6 +25,7 @@
 #include <lttng/ust-events.h>
 #include <lttng/ringbuffer-config.h>
 #include <lttng/ust-abi.h>
+#include "tracepoint-internal.h"
 
 void update_event_len_int(unsigned int *event_len, int value)
 {
@@ -57,6 +58,7 @@ void update_event_len_char_ptr(unsigned int *event_len, char *value)
 	/*
 	 * We used a ctf sequence to store the char array.
 	 * We must save space for the char array AND the integer that
+	 * represents the length of the sequence
 	 */
 	*event_len += lib_ring_buffer_align(*event_len,
 						lttng_alignof(unsigned int));
@@ -65,9 +67,31 @@ void update_event_len_char_ptr(unsigned int *event_len, char *value)
 	*event_len += (sizeof(char) * (strlen(value) + 1));
 }
 
+void tracepoint_register_only_once(struct tracepoint *tracepoint,
+					int *is_done_once)
+{
+	if(*is_done_once)
+	{
+		return;
+	}
+	tracepoint_register(tracepoint);
+	*is_done_once = 1;
+}
+
+void lttng_probe_register_only_once(struct lttng_probe_desc *desc,
+					int *is_done_once)
+{
+	if(*is_done_once)
+	{
+		return;
+	}
+	lttng_probe_register(desc);
+	*is_done_once = 1;
+}
+
 void init_ctx( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 			struct tracepoint *t,unsigned int *event_len,
-			int isEnable)
+			int isEnable, int *is_ready)
 {
 	if(!isEnable)
 	{
@@ -83,13 +107,15 @@ void init_ctx( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 			__event_align, -1, __chan->handle);
 	static_ctx->ip = __builtin_return_address(0);
 	__chan->ops->event_reserve(static_ctx, __event->id);
+
+	*is_ready = 1;
 }
 
 void event_write_int( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 			struct tracepoint *t, unsigned int *event_len,
-			int value, int isEnable)
+			int value, int is_ready)
 {
-	if(!isEnable)
+	if(!is_ready)
 	{
 		return;
 	}
@@ -103,9 +129,9 @@ void event_write_int( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 
 void event_write_ptr( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 			struct tracepoint *t, unsigned int *event_len,
-			void* value, int isEnable)
+			void* value, int is_ready)
 {
-	if(!isEnable)
+	if(!is_ready)
 	{
 		return;
 	}
@@ -119,9 +145,9 @@ void event_write_ptr( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 
 void event_write_char( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 			struct tracepoint *t, unsigned int *event_len,
-			char value, int isEnable)
+			char value, int is_ready)
 {
-	if(!isEnable)
+	if(!is_ready)
 	{
 		return;
 	}
@@ -135,9 +161,9 @@ void event_write_char( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 
 void event_write_char_ptr( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 			struct tracepoint *t, unsigned int *event_len,
-			char* value, int isEnable)
+			char* value, int is_ready)
 {
-	if(!isEnable)
+	if(!is_ready)
 	{
 		return;
 	}
@@ -156,9 +182,9 @@ void event_write_char_ptr( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 
 void event_write_float( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 			struct tracepoint *t, unsigned int *event_len,
-			float value, int isEnable)
+			float value, int is_ready)
 {
-	if(!isEnable)
+	if(!is_ready)
 	{
 		return;
 	}
@@ -173,9 +199,9 @@ void event_write_float( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
 }
 
 void event_commit( struct lttng_ust_lib_ring_buffer_ctx *static_ctx,
-			struct tracepoint *t, int isEnable)
+			struct tracepoint *t, int is_ready)
 {
-	if(!isEnable)
+	if(!is_ready)
 	{
 		return;
 	}
